@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <!-- latar: pola batik kawung + bintang (mode gelap) -->
+  <div class="bg-pattern" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="stars" aria-hidden="true"></div>
+
+  <!-- ============ HEADER ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="<?!= logo ?>" alt="Logo Jati Diri" class="brand-logo">
+      <div>
+        <div class="brand-title">Jati Diri</div>
+        <div class="brand-sub">Primbon Digital · Ragam Bahasa</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="btnFullscreen" type="button" aria-label="Layar penuh" title="Layar penuh">
+        <i class="fa-solid fa-expand"></i>
+      </button>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Ganti mode terang/gelap">
+      <span class="tt-track"><span class="tt-thumb"><i class="fa-solid fa-sun"></i><i class="fa-solid fa-moon"></i></span></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- ============ JAM DIGITAL + INFO HARI INI ============ -->
+    <section class="card today reveal" aria-label="Info hari ini">
+      <div class="clock">
+        <div class="clock-label"><span class="live-dot"></span> Waktu sekarang · <span id="tzLabel">WIB</span></div>
+        <div class="clock-digits" id="clockDigits" aria-live="off">
+          <span id="cH">00</span><span class="colon">:</span><span id="cM">00</span><span class="colon">:</span><span id="cS" class="sec">00</span>
+        </div>
+        <div class="clock-date" id="clockDate">&nbsp;</div>
+      </div>
+      <div class="today-items">
+        <div class="t-item" style="--c:var(--info)">
+          <span class="t-ic"><i class="fa-regular fa-calendar"></i></span>
+          <div><div class="t-label">Masehi</div><div class="t-val" id="tMasehi">–</div></div>
+        </div>
+        <div class="t-item" style="--c:#1F8A5B">
+          <span class="t-ic"><i class="fa-solid fa-moon"></i></span>
+          <div><div class="t-label">Hijriah</div><div class="t-val" id="tHijri">–</div></div>
+        </div>
+        <div class="t-item" style="--c:var(--primary)">
+          <span class="t-ic"><i class="fa-solid fa-sun"></i></span>
+          <div><div class="t-label">Weton / Pasaran</div><div class="t-val" id="tWeton">–</div><div class="t-sub" id="tNeptu"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HERO + FORMULIR ============ -->
+    <section class="hero" id="hero">
+      <div class="hero-text reveal">
+        <span class="eyebrow"><i class="fa-solid fa-feather-pointed"></i> Weton · Hijriah · Zodiak · Shio · Life Path</span>
+        <h1>Kenali <em>Jati Diri</em><br>dari Tanggal Lahir Anda</h1>
+        <p class="lead">Masukkan nama lengkap dan tanggal lahir. Kami menghitung kalender Hijriah, hari &amp; pasaran, neptu, usia, zodiak, shio, hingga angka life path — lengkap dengan deskripsi kepribadian.</p>
+      </div>
+
+      <div class="hero-visual reveal" aria-hidden="true">
+        <svg class="wheel" viewBox="0 0 300 300">
+          <defs>
+            <path id="ringPath" d="M150,150 m-118,0 a118,118 0 1,1 236,0 a118,118 0 1,1 -236,0"/>
+            <path id="ringPath2" d="M150,150 m-86,0 a86,86 0 1,1 172,0 a86,86 0 1,1 -172,0"/>
+          </defs>
+          <g class="wheel-outer">
+            <circle cx="150" cy="150" r="138" class="w-line"/>
+            <circle cx="150" cy="150" r="104" class="w-line"/>
+            <text class="w-text"><textPath href="#ringPath" textLength="738" lengthAdjust="spacing">LEGI ✦ PAHING ✦ PON ✦ WAGE ✦ KLIWON ✦ LEGI ✦ PAHING ✦ PON ✦ WAGE ✦ KLIWON ✦</textPath></text>
+          </g>
+          <g class="wheel-inner">
+            <circle cx="150" cy="150" r="74" class="w-line dashed"/>
+            <text class="w-text sm"><textPath href="#ringPath2" textLength="536" lengthAdjust="spacing">MINGGU · SENIN · SELASA · RABU · KAMIS · JUMAT · SABTU ·</textPath></text>
+          </g>
+          <g class="kawung">
+            <ellipse cx="150" cy="128" rx="13" ry="22"/><ellipse cx="150" cy="172" rx="13" ry="22"/>
+            <ellipse cx="128" cy="150" rx="22" ry="13"/><ellipse cx="172" cy="150" rx="22" ry="13"/>
+            <circle cx="150" cy="150" r="5"/>
+          </g>
+        </svg>
+      </div>
+
+      <form class="card form-card reveal" id="formJatiDiri" novalidate autocomplete="off">
+        <div class="form-head">
+          <span class="icon-badge"><i class="fa-solid fa-user-pen"></i></span>
+          <div>
+            <h2>Data Diri</h2>
+            <p>Isi dengan benar agar hasil akurat</p>
+          </div>
+        </div>
+        <label class="field">
+          <span class="field-label">Nama lengkap</span>
+          <span class="field-box">
+            <i class="fa-regular fa-user"></i>
+            <input type="text" id="nama" maxlength="80" placeholder="cth. Rudi Bahruddin" required>
+          </span>
+        </label>
+        <label class="field">
+          <span class="field-label">Tanggal lahir (Masehi)</span>
+          <span class="field-box">
+            <i class="fa-regular fa-calendar"></i>
+            <input type="date" id="tglLahir" min="1900-01-01" required>
+          </span>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block" id="btnProses">
+          <i class="fa-solid fa-wand-magic-sparkles"></i> <span>Baca Jati Diri</span>
+        </button>
+        <p class="hint"><i class="fa-solid fa-shield-halved"></i> Data tidak disimpan kecuali Anda meminta PDF dikirim ke email.</p>
+      </form>
+    </section>
+
+    <!-- ============ HASIL ============ -->
+    <section id="hasil" class="hasil" hidden></section>
+  </main>
+
+  <!-- ============ FOOTER (DIKUNCI) ============ -->
+  <footer class="footer-lock" id="footerLock">(C) Ragam Bahasa 2026 | by Rudi Bahruddin</footer>
+
+  <!-- ============ WADAH DIALOG & TOAST ============ -->
+  <div class="modal-root" id="modalRoot" aria-live="polite"></div>
+  <div class="toast-root" id="toastRoot" aria-live="polite"></div>
+
+  <?!= include('Script'); ?>
+</body>
+</html>

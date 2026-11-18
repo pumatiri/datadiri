@@ -1,0 +1,545 @@
+<script>
+/* ==========================================================
+   JATI DIRI — Script (sisi browser)  |  (C) Ragam Bahasa 2026
+   ========================================================== */
+(function () {
+  'use strict';
+
+  const FOOTER_TEXT = '(C) Ragam Bahasa 2026 | by Rudi Bahruddin';
+  const $ = (s, el) => (el || document).querySelector(s);
+  const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* abaikan */ } }
+  };
+  const state = { data: null, tab: 'weton', input: null };
+
+  /* ---------- Panggil fungsi server (google.script.run) sebagai Promise ---------- */
+  function server(fn, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(new Error(String((err && err.message) || err)
+          .replace(/^(Error|Exception|ScriptError):\s*/i, ''))))[fn](...args);
+    });
+  }
+
+  /* =================== TEMA (terang / gelap) =================== */
+  const root = document.documentElement;
+  function setTheme(t) { root.setAttribute('data-theme', t); store.set('jd_theme', t); }
+  (function initTheme() {
+    let t = store.get('jd_theme');
+    if (t !== 'dark' && t !== 'light') t = 'light'; // bawaan: mode terang
+    root.setAttribute('data-theme', t);
+  })();
+  $('#themeToggle').addEventListener('click', () =>
+    setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+
+  /* =================== LAYAR PENUH =================== */
+  // Jika disematkan di halaman GitHub Pages (iframe), layar penuh diminta ke halaman induk
+  // lewat postMessage, karena iframe bawaan Google tidak mengizinkan fullscreen.
+  const btnFs = $('#btnFullscreen');
+  const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  let induk = { fs: false, aktif: false };
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function syncFsIcon() {
+    const on = !!fsEl() || induk.fs;
+    btnFs.innerHTML = '<i class="fa-solid ' + (on ? 'fa-compress' : 'fa-expand') + '"></i>';
+    btnFs.title = on ? 'Keluar layar penuh' : 'Layar penuh';
+    btnFs.setAttribute('aria-label', btnFs.title);
+  }
+  function fsGagal() {
+    Dialog.show({
+      type: 'info', title: 'Mode Layar Penuh',
+      message: 'Browser ini tidak mengizinkan layar penuh dari dalam halaman.<br>Tekan <b>F11</b> (Windows) atau <b>Ctrl+Cmd+F</b> (Mac) untuk layar penuh. Di HP, gunakan menu browser <b>"Tambahkan ke layar utama"</b>.'
+    });
+  }
+  function fsLokal() {
+    const el = document.documentElement;
+    if (fsEl()) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req || document.fullscreenEnabled === false) return fsGagal();
+    try { const p = req.call(el); if (p && p.catch) p.catch(fsGagal); } catch (e) { fsGagal(); }
+  }
+  window.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.jatidiri === 'fs-state') { induk.aktif = true; induk.fs = !!d.on; induk.balas = true; syncFsIcon(); }
+  });
+  if (inFrame) { try { window.top.postMessage({ jatidiri: 'ready' }, '*'); } catch (e) { /* abaikan */ } }
+  btnFs.addEventListener('click', () => {
+    if (inFrame && !fsEl()) {
+      induk.balas = false;
+      try { window.top.postMessage({ jatidiri: 'fs-toggle' }, '*'); } catch (e) { /* abaikan */ }
+      setTimeout(() => { if (!induk.balas) fsLokal(); }, 600);
+      return;
+    }
+    fsLokal();
+  });
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, syncFsIcon));
+
+  /* =================== JAM DIGITAL + INFO HARI INI =================== */
+  const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const PASARAN = ['Legi', 'Pahing', 'Pon', 'Wage', 'Kliwon'];
+  const NH = [5, 4, 3, 7, 8, 6, 9], NP = [5, 9, 7, 4, 8];
+  const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const BULAN_H = ['Muharram', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', "Sya'ban", 'Ramadhan', 'Syawal', "Dzulqa'dah", 'Dzulhijjah'];
+  const pad = n => String(n).padStart(2, '0');
+  function jdn(y, m, d) {
+    const a = Math.floor((14 - m) / 12), yy = y + 4800 - a, mm = m + 12 * a - 3;
+    return d + Math.floor((153 * mm + 2) / 5) + 365 * yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+  }
+  function hijriUrfi(j) {
+    const keJd = (yy, mm, dd) => dd + Math.ceil(29.5 * (mm - 1)) + (yy - 1) * 354 + Math.floor((3 + 11 * yy) / 30) + 1948439.5 - 1;
+    const jd = j - 0.5, yy = Math.floor((30 * (jd - 1948439.5) + 10646) / 10631);
+    const mm = Math.min(12, Math.ceil((jd - (29 + keJd(yy, 1, 1))) / 29.5) + 1);
+    return [yy, mm, Math.round(jd - keJd(yy, mm, 1)) + 1];
+  }
+  function hijri(y, m, d) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { timeZone: 'UTC', year: 'numeric', month: 'numeric', day: 'numeric' })
+        .formatToParts(new Date(Date.UTC(y, m - 1, d, 12)));
+      const g = t => parseInt((parts.find(x => x.type === t) || {}).value, 10);
+      const r = [g('year'), g('month'), g('day')];
+      if (r[0] > 1300 && r[1] >= 1 && r[1] <= 12 && r[2] >= 1 && r[2] <= 30) return r;
+    } catch (e) { /* pakai cadangan */ }
+    return hijriUrfi(jdn(y, m, d));
+  }
+  function zonaWaktu(now) {
+    const off = -now.getTimezoneOffset() / 60;
+    return ({ 7: 'WIB', 8: 'WITA', 9: 'WIT' })[off] || ('GMT' + (off >= 0 ? '+' : '') + off);
+  }
+  let hariTerakhir = '';
+  function tick() {
+    const now = new Date();
+    $('#cH').textContent = pad(now.getHours());
+    $('#cM').textContent = pad(now.getMinutes());
+    $('#cS').textContent = pad(now.getSeconds());
+    const y = now.getFullYear(), m = now.getMonth() + 1, d = now.getDate();
+    const key = y + '-' + m + '-' + d;
+    if (key === hariTerakhir) return;
+    hariTerakhir = key;
+    const j = jdn(y, m, d), hi = (j + 1) % 7, pi = j % 5, h = hijri(y, m, d);
+    $('#tzLabel').textContent = zonaWaktu(now);
+    $('#clockDate').textContent = HARI[hi] + ', ' + d + ' ' + BULAN[m - 1] + ' ' + y;
+    $('#tMasehi').textContent = d + ' ' + BULAN[m - 1] + ' ' + y;
+    $('#tHijri').textContent = h[2] + ' ' + BULAN_H[h[1] - 1] + ' ' + h[0] + ' H';
+    $('#tWeton').textContent = HARI[hi] + ' ' + PASARAN[pi];
+    $('#tNeptu').textContent = 'Neptu ' + (NH[hi] + NP[pi]) + ' (' + NH[hi] + ' + ' + NP[pi] + ')';
+  }
+  tick();
+  setTimeout(() => { tick(); setInterval(tick, 1000); }, 1000 - new Date().getMilliseconds());
+
+  /* bintang untuk mode gelap */
+  (function stars() {
+    const box = $('.stars'); let html = '';
+    for (let i = 0; i < 70; i++) {
+      html += '<i style="left:' + (Math.random() * 100).toFixed(2) + '%;top:' + (Math.random() * 100).toFixed(2) +
+        '%;animation-delay:' + (Math.random() * 4).toFixed(2) + 's;opacity:' + (Math.random() * .8 + .1).toFixed(2) + '"></i>';
+    }
+    box.innerHTML = html;
+  })();
+
+  /* =================== ANIMASI MUNCUL =================== */
+  const io = ('IntersectionObserver' in window) ? new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: .08 }) : null;
+  function observeReveal(scope) {
+    $$('.reveal:not(.in)', scope).forEach((el, i) => {
+      el.style.transitionDelay = Math.min(i * 70, 560) + 'ms';
+      io ? io.observe(el) : el.classList.add('in');
+    });
+  }
+  observeReveal(document);
+
+  function animateCount(scope) {
+    $$('[data-count]', scope).forEach(el => {
+      const target = +el.dataset.count, dur = 1100, t0 = performance.now();
+      const fmt = n => n.toLocaleString('id-ID');
+      (function step(t) {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = fmt(Math.round(target * e));
+        if (p < 1) requestAnimationFrame(step);
+      })(t0);
+    });
+  }
+
+  /* =================== TOAST =================== */
+  function toast(msg, icon) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = '<i class="fa-solid ' + (icon || 'fa-circle-info') + '"></i><span>' + esc(msg) + '</span>';
+    $('#toastRoot').appendChild(el);
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 2800);
+  }
+  let lastProtectToast = 0;
+  function protectToast() {
+    if (Date.now() - lastProtectToast < 2500) return;
+    lastProtectToast = Date.now();
+    toast('Teks deskripsi dilindungi. Gunakan "Kirim PDF ke Email" untuk menyimpan hasil.', 'fa-lock');
+  }
+
+  /* =================== DIALOG KUSTOM (pengganti alert) =================== */
+  const TYPES = {
+    info:    { c: 'var(--info)',  i: 'fa-circle-info' },
+    success: { c: 'var(--ok)',    i: null },
+    error:   { c: 'var(--err)',   i: 'fa-triangle-exclamation' },
+    warning: { c: 'var(--gold)',  i: 'fa-circle-exclamation' },
+    mail:    { c: 'var(--primary)', i: 'fa-envelope-open-text' }
+  };
+  const Dialog = {
+    /**
+     * opt: {type,title,message,body,confirmText,cancelText,onConfirm(modalEl) -> Promise<boolean|void>}
+     * Mengembalikan Promise<boolean> (true = tombol utama).
+     */
+    show(opt) {
+      const rootEl = $('#modalRoot');
+      const t = TYPES[opt.type] || TYPES.info;
+      const icon = t.i ? '<i class="fa-solid ' + t.i + '"></i>'
+        : '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path class="check-anim" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      rootEl.innerHTML =
+        '<div class="modal-backdrop"></div>' +
+        '<div class="modal" role="dialog" aria-modal="true" style="--mc:' + t.c + '">' +
+          '<button class="modal-close" type="button" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>' +
+          '<div class="modal-icon">' + icon + '</div>' +
+          '<h3>' + esc(opt.title || '') + '</h3>' +
+          '<div class="msg">' + (opt.message || '') + '</div>' +
+          (opt.body || '') +
+          '<div class="modal-actions">' +
+            (opt.cancelText ? '<button type="button" class="btn btn-ghost" data-act="cancel">' + esc(opt.cancelText) + '</button>' : '') +
+            '<button type="button" class="btn btn-primary" data-act="ok">' + (opt.confirmHtml || esc(opt.confirmText || 'Mengerti')) + '</button>' +
+          '</div>' +
+        '</div>';
+      rootEl.classList.remove('closing');
+      rootEl.classList.add('open');
+      const modal = $('.modal', rootEl), okBtn = $('[data-act="ok"]', rootEl);
+      setTimeout(() => { const f = $('input', modal) || okBtn; f && f.focus(); }, 60);
+
+      return new Promise(resolve => {
+        let busy = false;
+        const close = val => {
+          rootEl.classList.add('closing');
+          document.removeEventListener('keydown', onKey);
+          setTimeout(() => { rootEl.classList.remove('open', 'closing'); rootEl.innerHTML = ''; resolve(val); }, 200);
+        };
+        const onKey = e => {
+          if (e.key === 'Escape' && !busy) close(false);
+          if (e.key === 'Enter' && !busy && e.target.tagName !== 'BUTTON') { e.preventDefault(); okBtn.click(); }
+        };
+        document.addEventListener('keydown', onKey);
+        $('.modal-backdrop', rootEl).onclick = () => { if (!busy) close(false); };
+        $('.modal-close', rootEl).onclick = () => { if (!busy) close(false); };
+        const cancel = $('[data-act="cancel"]', rootEl);
+        if (cancel) cancel.onclick = () => { if (!busy) close(false); };
+        okBtn.onclick = async () => {
+          if (busy) return;
+          if (!opt.onConfirm) return close(true);
+          busy = true;
+          const old = okBtn.innerHTML;
+          okBtn.disabled = true; okBtn.innerHTML = '<span class="spin"></span> Memproses…';
+          try {
+            const r = await opt.onConfirm(modal);
+            if (r === false) { busy = false; okBtn.disabled = false; okBtn.innerHTML = old; return; }
+            close(true);
+          } catch (err) {
+            busy = false; okBtn.disabled = false; okBtn.innerHTML = old;
+            const m = $('.modal-err', modal);
+            if (m) { m.textContent = err.message; m.hidden = false; } else close(false);
+          }
+        };
+      });
+    }
+  };
+  window.Dialog = Dialog;
+  // Ganti alert bawaan dengan dialog kustom
+  window.alert = msg => Dialog.show({ type: 'info', title: 'Informasi', message: esc(msg) });
+
+  /* =================== FORMULIR =================== */
+  const form = $('#formJatiDiri'), inNama = $('#nama'), inTgl = $('#tglLahir'), btn = $('#btnProses');
+  (function setMaxDate() {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    inTgl.max = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  })();
+  [inNama, inTgl].forEach(el => el.addEventListener('input', () => el.closest('.field').classList.remove('invalid')));
+
+  function invalid(el, msg) {
+    const f = el.closest('.field'); f.classList.remove('invalid'); void f.offsetWidth; f.classList.add('invalid');
+    el.focus();
+    Dialog.show({ type: 'warning', title: 'Periksa Kembali', message: esc(msg) });
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const nama = inNama.value.trim().replace(/\s+/g, ' ');
+    const tgl = inTgl.value;
+    if (nama.length < 2) return invalid(inNama, 'Silakan isi nama lengkap Anda terlebih dahulu.');
+    if (!/^[A-Za-zÀ-ÿ'.,\- ]+$/.test(nama)) return invalid(inNama, 'Nama hanya boleh berisi huruf, spasi, titik, koma, apostrof, atau tanda hubung.');
+    if (!tgl) return invalid(inTgl, 'Silakan pilih tanggal lahir Anda.');
+    if (tgl < '1900-01-01') return invalid(inTgl, 'Tanggal lahir minimal tahun 1900.');
+    if (inTgl.max && tgl > inTgl.max) return invalid(inTgl, 'Tanggal lahir tidak boleh melebihi hari ini.');
+
+    setBusy(true);
+    showSkeleton();
+    try {
+      const data = await server('hitungJatiDiri', nama, tgl);
+      state.data = data; state.input = { nama, tgl }; state.tab = 'weton';
+      render(data);
+      if (data.usia.ultahHariIni) setTimeout(() => toast('Selamat ulang tahun, ' + data.nama.split(' ')[0] + '! 🎉', 'fa-cake-candles'), 900);
+    } catch (err) {
+      $('#hasil').hidden = true; $('#hasil').innerHTML = '';
+      Dialog.show({ type: 'error', title: 'Gagal Memproses', message: esc(err.message || 'Terjadi kesalahan. Silakan coba lagi.') });
+    } finally { setBusy(false); }
+  });
+
+  function setBusy(on) {
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="spin"></span> <span>Membaca…</span>'
+      : '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Baca Jati Diri</span>';
+  }
+
+  function showSkeleton() {
+    const h = $('#hasil');
+    h.hidden = false;
+    h.innerHTML =
+      '<div class="section-title"><span class="ornament">✦</span><h2>Membaca jati diri…</h2></div>' +
+      '<div class="sk sk-identity"></div>' +
+      '<div class="grid">' + '<div class="sk sk-card"></div>'.repeat(6) + '</div>' +
+      '<p class="loading-note">Menghitung weton, kalender Hijriah, dan angka kelahiran <span class="dots"><span></span><span></span><span></span></span></p>';
+    h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* =================== TAMPILKAN HASIL =================== */
+  function stat(o) {
+    return '<article class="card stat reveal' + (o.wide ? ' wide' : '') + '" style="--c:' + o.c + '">' +
+      '<div class="head"><span class="ic"><i class="fa-solid ' + o.icon + '"></i></span>' + esc(o.label) + '</div>' +
+      o.html + (o.deco ? '<div class="deco">' + o.deco + '</div>' : '') + '</article>';
+  }
+
+  function render(d) {
+    const h = $('#hasil');
+    const w = d.weton, u = d.usia, z = d.zodiak, s = d.shio, lp = d.lifePath, hj = d.hijriah;
+    const pH = Math.round(w.neptuHari / w.neptu * 100);
+
+    h.innerHTML =
+      '<div class="section-title"><span class="ornament">✦</span><h2>Hasil Pembacaan</h2></div>' +
+
+      // ---- kartu identitas ----
+      '<div class="card identity reveal">' +
+        '<div class="avatar">' + esc(d.inisial) + '</div>' +
+        '<div>' +
+          '<div class="label">Jati diri untuk</div>' +
+          '<h2>' + esc(d.nama) + '</h2>' +
+          '<div class="born"><i class="fa-regular fa-calendar"></i> Lahir ' + esc(d.lahir.teks) + '</div>' +
+          '<div class="chips">' +
+            '<span class="chip"><i class="fa-solid fa-sun"></i>' + esc(w.teks) + '</span>' +
+            '<span class="chip"><i class="fa-solid fa-moon"></i>' + esc(hj.teks) + '</span>' +
+            '<span class="chip">' + esc(z.simbol) + ' ' + esc(z.nama) + '</span>' +
+            '<span class="chip">' + esc(s.ikon) + ' Shio ' + esc(s.nama) + '</span>' +
+            '<span class="chip"><i class="fa-solid fa-route"></i>Life Path ' + lp.angka + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="big-weton"><div class="t">Neptu</div><div class="n" data-count="' + w.neptu + '">0</div><div class="t">' + esc(w.teks) + '</div></div>' +
+      '</div>' +
+
+      // ---- grid kartu ----
+      '<div class="grid">' +
+        stat({ label: 'Kalender Hijriah', icon: 'fa-moon', c: '#1F8A5B', deco: '☪',
+          html: '<div class="value nowrap">' + esc(hj.teks) + '</div>' +
+                '<div class="sub">Bulan ' + esc(hj.bulan) + ' · tahun ' + hj.y + ' H</div>' +
+                '<div class="formula"><i class="fa-solid fa-circle-info"></i> Metode ' + esc(hj.metode) + '. Bisa berbeda ±1 hari dengan kalender rukyat/Kemenag. Pergantian hari Hijriah dimulai saat maghrib.</div>' }) +
+        stat({ label: 'Hari & Pasaran', icon: 'fa-calendar-day', c: 'var(--primary)', deco: '✺',
+          html: '<div class="value">' + esc(w.teks) + '</div>' +
+                '<dl class="kv"><dt>Hari</dt><dd>' + esc(w.hari) + ' (neptu ' + w.neptuHari + ')</dd>' +
+                '<dt>Pasaran</dt><dd>' + esc(w.pasaran) + ' (neptu ' + w.neptuPasaran + ')</dd>' +
+                '<dt>Wetonan</dt><dd>' + esc(w.berikutnya) + (w.hariLagi === 0 ? ' · <b>hari ini!</b>' : ' · ' + w.hariLagi + ' hari lagi') + '</dd></dl>' }) +
+        stat({ label: 'Neptu Weton', icon: 'fa-scale-balanced', c: 'var(--gold)', deco: '∑',
+          html: '<div class="value"><span data-count="' + w.neptu + '">0</span></div>' +
+                '<div class="sub">' + esc(w.hari) + ' ' + w.neptuHari + ' + ' + esc(w.pasaran) + ' ' + w.neptuPasaran + ' = ' + w.neptu + '</div>' +
+                '<div class="neptu-bar"><span style="width:0;background:var(--primary)" data-w="' + pH + '%"></span><span style="width:0;background:var(--gold-2)" data-w="' + (100 - pH) + '%"></span></div>' +
+                '<div class="neptu-legend"><span>Hari <b>' + w.neptuHari + '</b></span><span>Pasaran <b>' + w.neptuPasaran + '</b></span></div>' }) +
+        stat({ label: 'Usia Saat Ini', icon: 'fa-hourglass-half', c: 'var(--info)', wide: true,
+          html: '<div class="age-row">' +
+                  '<div class="age-box"><div class="n" data-count="' + u.tahun + '">0</div><div class="l">Tahun</div></div>' +
+                  '<div class="age-box"><div class="n" data-count="' + u.bulan + '">0</div><div class="l">Bulan</div></div>' +
+                  '<div class="age-box"><div class="n" data-count="' + u.hari + '">0</div><div class="l">Hari</div></div>' +
+                '</div>' +
+                '<dl class="kv"><dt>Total</dt><dd><span data-count="' + u.totalHari + '">0</span> hari kehidupan</dd>' +
+                '<dt>Ulang tahun</dt><dd>' + (u.ultahHariIni ? '<b>Hari ini! 🎉</b> · berikutnya ' : 'ke-' + u.ultahBerikutnya.ke + ' · ') + esc(u.ultahBerikutnya.teks) + ' (' + u.ultahBerikutnya.hariLagi + ' hari lagi)</dd></dl>' }) +
+        stat({ label: 'Zodiak', icon: 'fa-star', c: '#7B4FC9', deco: esc(z.simbol),
+          html: '<div class="value">' + esc(z.simbol) + ' ' + esc(z.nama) + '</div>' +
+                '<div class="sub">' + esc(z.rentang) + '</div>' +
+                '<div style="margin-top:10px"><span class="tag"><i class="fa-solid fa-fire-flame-curved"></i> ' + esc(z.elemen) + '</span><span class="tag"><i class="fa-solid fa-globe"></i> ' + esc(z.planet) + '</span></div>' }) +
+        stat({ label: 'Shio', icon: 'fa-dragon', c: '#D9822B', deco: esc(s.ikon),
+          html: '<div class="value">' + esc(s.ikon) + ' ' + esc(s.nama) + '</div>' +
+                '<div class="sub">' + esc(s.nama) + ' ' + esc(s.elemen) + ' · ' + esc(s.yinyang) + '</div>' +
+                '<div style="margin-top:10px"><span class="tag">Elemen ' + esc(s.elemen) + '</span><span class="tag">' + esc(s.yinyang) + '</span><span class="tag">Tahun ' + s.tahunImlek + '</span></div>' +
+                (s.catatan ? '<div class="formula"><i class="fa-solid fa-circle-info"></i> ' + esc(s.catatan) + '</div>' : '') }) +
+        stat({ label: 'Life Path (Numerologi)', icon: 'fa-route', c: 'var(--primary)', wide: true,
+          html: '<div class="lp-wrap"><div class="lp-num" data-count="' + lp.angka + '">0</div>' +
+                '<div><div class="value" style="margin:0">' + esc(lp.julukan) + '</div>' +
+                '<div class="sub">' + (lp.master ? 'Angka Master · ' : '') + 'Karier yang cocok: ' + esc(lp.karier) + '</div></div></div>' +
+                '<div class="formula"><i class="fa-solid fa-calculator"></i> ' + esc(lp.rumus) + '</div>' }) +
+      '</div>' +
+
+      // ---- deskripsi ----
+      '<div class="section-title"><span class="ornament">✦</span><h2>Deskripsi Jati Diri</h2></div>' +
+      '<div class="tabs reveal" role="tablist">' +
+        tabBtn('weton', 'fa-sun', 'Weton') + tabBtn('zodiak', 'fa-star', 'Zodiak') +
+        tabBtn('shio', 'fa-dragon', 'Shio') + tabBtn('lifepath', 'fa-route', 'Life Path') +
+      '</div>' +
+      '<article class="card reader reveal" id="reader" aria-live="polite"></article>' +
+
+      // ---- CTA PDF ----
+      '<div class="card cta reveal">' +
+        '<div class="doc"><i class="fa-solid fa-file-pdf"></i></div>' +
+        '<div class="txt"><h3>Simpan Hasil Lengkap</h3><p>Dapatkan seluruh hasil &amp; deskripsi dalam file PDF yang dikirim langsung ke email Anda.</p></div>' +
+        '<div class="actions">' +
+          '<button class="btn btn-ghost" type="button" id="btnUlang"><i class="fa-solid fa-rotate-left"></i> Cek Lain</button>' +
+          '<button class="btn btn-gold" type="button" id="btnPdf"><i class="fa-solid fa-paper-plane"></i> Kirim PDF ke Email</button>' +
+        '</div>' +
+      '</div>' +
+      '<p class="disclaimer"><i class="fa-solid fa-feather"></i> Hasil ini bersifat hiburan dan bahan refleksi diri berdasarkan tradisi primbon, astrologi, dan numerologi — bukan ramalan pasti.</p>';
+
+    h.hidden = false;
+    $$('.tab', h).forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    $('#btnPdf').addEventListener('click', mintaPdf);
+    $('#btnUlang').addEventListener('click', ulang);
+    renderReader(false);
+    observeReveal(h);
+    setTimeout(() => {
+      animateCount(h);
+      $$('[data-w]', h).forEach(el => { el.style.width = el.dataset.w; });
+    }, 250);
+    h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function tabBtn(id, icon, label) {
+    return '<button class="tab' + (state.tab === id ? ' active' : '') + '" type="button" role="tab" data-tab="' + id + '">' +
+      '<i class="fa-solid ' + icon + '"></i>' + label + '</button>';
+  }
+
+  function switchTab(id) {
+    if (id === state.tab) return;
+    state.tab = id;
+    $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+    renderReader(true);
+  }
+
+  function renderReader(animate) {
+    const d = state.data, r = $('#reader');
+    let kicker, title, paras, plus, minus;
+    if (state.tab === 'weton') {
+      kicker = 'Watak Weton'; title = d.weton.teks + ' · Neptu ' + d.weton.neptu; paras = d.weton.deskripsi;
+    } else if (state.tab === 'zodiak') {
+      kicker = 'Zodiak · ' + d.zodiak.rentang; title = d.zodiak.simbol + ' ' + d.zodiak.nama; paras = d.zodiak.deskripsi;
+      plus = d.zodiak.kekuatan; minus = d.zodiak.tantangan;
+    } else if (state.tab === 'shio') {
+      kicker = 'Shio · Tahun ' + d.shio.tahunImlek; title = d.shio.ikon + ' ' + d.shio.nama + ' ' + d.shio.elemen; paras = d.shio.deskripsi;
+      plus = d.shio.kekuatan; minus = d.shio.tantangan;
+    } else {
+      kicker = 'Life Path ' + d.lifePath.angka; title = d.lifePath.julukan; paras = d.lifePath.deskripsi;
+      plus = d.lifePath.kekuatan; minus = d.lifePath.tantangan;
+    }
+    const wmText = (d.nama + ' · Ragam Bahasa · ').repeat(60);
+    r.innerHTML =
+      '<div class="wm" aria-hidden="true">' + esc(wmText) + '</div>' +
+      '<div class="reader-head"><div><div class="kicker">' + esc(kicker) + '</div><h3>' + esc(title) + '</h3></div>' +
+      '<span class="lock"><i class="fa-solid fa-lock"></i> Hanya baca</span></div>' +
+      '<div class="reader-body' + (animate ? ' swap' : '') + '">' +
+        ((paras && paras.length) ? paras.map(p => '<p>' + esc(p) + '</p>').join('') : '<p>Deskripsi belum tersedia di database.</p>') +
+        ((plus || minus) ? '<div class="trait-row">' +
+          (plus ? '<div class="trait plus"><b><i class="fa-solid fa-circle-plus"></i> Kekuatan</b>' + esc(plus) + '</div>' : '') +
+          (minus ? '<div class="trait minus"><b><i class="fa-solid fa-circle-minus"></i> Tantangan</b>' + esc(minus) + '</div>' : '') +
+        '</div>' : '') +
+      '</div>';
+  }
+
+  function ulang() {
+    state.data = null;
+    $('#hasil').hidden = true; $('#hasil').innerHTML = '';
+    form.reset();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => inNama.focus(), 400);
+  }
+
+  /* =================== KIRIM PDF KE EMAIL =================== */
+  function mintaPdf() {
+    if (!state.data) return;
+    const last = store.get('jd_email') || '';
+    Dialog.show({
+      type: 'mail',
+      title: 'Kirim PDF ke Email',
+      message: 'Laporan lengkap <b>' + esc(state.data.nama) + '</b> akan dikirim sebagai lampiran PDF ke email Anda.',
+      body:
+        '<label class="field"><span class="field-label">Alamat email</span>' +
+        '<span class="field-box"><i class="fa-regular fa-envelope"></i>' +
+        '<input type="email" id="inEmail" placeholder="nama@gmail.com" value="' + esc(last) + '" autocomplete="email"></span></label>' +
+        '<p class="modal-err" hidden style="color:var(--err);font-size:.85rem;text-align:left;margin-top:6px"></p>',
+      cancelText: 'Batal',
+      confirmHtml: '<i class="fa-solid fa-paper-plane"></i> Kirim',
+      onConfirm: async modal => {
+        const email = $('#inEmail', modal).value.trim();
+        const errEl = $('.modal-err', modal);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+          errEl.textContent = 'Format email belum benar. Contoh: nama@gmail.com'; errEl.hidden = false;
+          const f = $('#inEmail', modal).closest('.field'); f.classList.remove('invalid'); void f.offsetWidth; f.classList.add('invalid');
+          return false;
+        }
+        errEl.hidden = true;
+        const res = await server('kirimPdf', state.input.nama, state.input.tgl, email);
+        store.set('jd_email', email);
+        state.sentTo = res.email;
+        return true;
+      }
+    }).then(ok => {
+      if (!ok) return;
+      Dialog.show({
+        type: 'success',
+        title: 'PDF Terkirim!',
+        message: 'Laporan sudah dikirim ke <b>' + esc(state.sentTo) + '</b>.<br>Jika belum muncul dalam beberapa menit, periksa folder <b>Spam</b> atau <b>Promosi</b>.',
+        confirmText: 'Selesai'
+      });
+    });
+  }
+
+  /* =================== PERLINDUNGAN TEKS DESKRIPSI =================== */
+  const inReader = el => !!(el && el.closest && el.closest('.reader'));
+  const isField = el => el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
+  ['copy', 'cut'].forEach(ev => document.addEventListener(ev, e => {
+    const sel = window.getSelection && window.getSelection();
+    const node = sel && sel.anchorNode ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement) : null;
+    if (!isField(document.activeElement) && (inReader(e.target) || inReader(node) || (sel && $('#reader') && sel.containsNode && sel.containsNode($('#reader'), true)))) {
+      e.preventDefault(); if (e.clipboardData) e.clipboardData.setData('text/plain', ''); protectToast();
+    }
+  }));
+  ['contextmenu', 'selectstart', 'dragstart'].forEach(ev => document.addEventListener(ev, e => {
+    if (inReader(e.target)) { e.preventDefault(); if (ev === 'contextmenu') protectToast(); }
+  }));
+  document.addEventListener('keydown', e => {
+    const k = (e.key || '').toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && ['p', 's', 'u'].includes(k)) { e.preventDefault(); if (state.data) protectToast(); }
+    if ((e.ctrlKey || e.metaKey) && k === 'a' && !isField(document.activeElement)) e.preventDefault();
+  });
+
+  /* =================== FOOTER TERKUNCI =================== */
+  function ensureFooter() {
+    let f = document.getElementById('footerLock');
+    if (!f || !document.body.contains(f)) {
+      f = document.createElement('footer'); f.id = 'footerLock'; f.className = 'footer-lock';
+      document.body.appendChild(f);
+    }
+    if (f.className !== 'footer-lock') f.className = 'footer-lock';
+    if (f.getAttribute('style')) f.removeAttribute('style');
+    if (f.textContent !== FOOTER_TEXT) f.textContent = FOOTER_TEXT;
+    if (f.hidden) f.hidden = false;
+  }
+  ensureFooter();
+  new MutationObserver(() => ensureFooter())
+    .observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  setInterval(ensureFooter, 3000);
+
+  // fokus awal
+  setTimeout(() => { if (window.innerWidth > 980) inNama.focus(); }, 600);
+})();
+</script>
